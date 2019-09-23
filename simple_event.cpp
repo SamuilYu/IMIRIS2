@@ -26,7 +26,7 @@ public:
 #define RUN 1
 #define IDLE 0
 
-#define LIMIT 1000 // время окончания моделирования
+#define LIMIT 600 // время окончания моделирования
 
 class Request // задание в очереди
 {
@@ -42,6 +42,8 @@ class Calendar: public list<Event*> // календарь событий
   void put (Event* ev); // вставить событие в список с упорядочением по полю time
   Event* get (); // извлечь первое событие из календаря (с наименьшим модельным временем)
 };
+
+
 
 void Calendar::put(Event *ev)
 {
@@ -67,6 +69,7 @@ Event* Calendar::get()
 
 typedef list<Request*> Queue; // очередь заданий к процессору 
 
+int rc = 0; int pc = 0; int rn = 0;
 float get_req_time(int source_num); // длительность задания
 float get_pause_time(int source_num); // длительность паузы между заданиями
 
@@ -89,7 +92,7 @@ calendar.put( curr_ev );
 
 while((curr_ev = calendar.get()) != NULL )
 {
-  cout << "time " << curr_ev->time << " type " << curr_ev->type << endl;
+  //cout << "time " << curr_ev->time << " type " << curr_ev->type << endl;
   curr_time = curr_ev->time; // продвигаем время
   // обработка события
   if( curr_time >= LIMIT )break; // типичное дополнительное условие останова моделирования
@@ -97,33 +100,47 @@ while((curr_ev = calendar.get()) != NULL )
   {
   case EV_INIT:  // запускаем генераторы запросов
     calendar.put(new Event(curr_time, EV_REQ, 1));  
-    calendar.put(new Event(curr_time, EV_REQ, 2));  
   break;
   case EV_REQ:
     // планируем событие окончания обработки, если процессор свободен, иначе ставим в очередь
     dt = get_req_time(curr_ev->attr); 
-	cout << "dt " << dt << " num " << curr_ev->attr << endl;
+	//cout << "dt " << dt << " num " << curr_ev->attr << endl;
     if(cpu_state == IDLE) 
 	{ 
-	  cpu_state = RUN; 
-	  calendar.put(new Event(curr_time+dt, EV_FIN, curr_ev->attr)); 
-	  run_begin = curr_time;
+	  if (curr_ev -> attr == (rn%3+1))
+	  {
+		  cpu_state = RUN; 
+		  calendar.put(new Event(curr_time+dt, EV_FIN, curr_ev->attr)); 
+		  rn++;
+		  run_begin = curr_time;
+		  calendar.put(new Event(curr_time + get_pause_time(curr_ev->attr%3+1), EV_REQ, curr_ev->attr%3+1));
+	  }
+	  else 
+		calendar.put(new Event(curr_time + get_pause_time(curr_ev->attr), EV_REQ, curr_ev->attr));
 	} 
     else 
- 	  queue.push_back(new Request(dt, curr_ev->attr));  
-  // планируем событие генерации следующего задания
-    calendar.put(new Event(curr_time+get_pause_time(curr_ev->attr), EV_REQ, curr_ev->attr)); 
+		if (curr_ev -> attr == (rn%3+1)%3+1)
+		{
+			queue.push_back(new Request(dt, curr_ev->attr)); 
+			rn++;
+			calendar.put(new Event(curr_time + get_pause_time(curr_ev->attr%3+1), EV_REQ, curr_ev->attr%3+1));
+		}
+		else
+			calendar.put(new Event(curr_time + get_pause_time(curr_ev->attr), EV_REQ, curr_ev->attr));
+	// планируем событие генерации следующего задания
+	 
 	break;
   case EV_FIN:
     // объявляем процессор свободным и размещаем задание из очереди, если таковое есть
     cpu_state=IDLE; 
     // выводим запись о рабочем интервале
-    cout << "Работа с " << run_begin << " по " << curr_time << " длит. " << (curr_time-run_begin) << endl; 
+    cout << "Для клиента " << curr_ev->attr << ": Работа с " << run_begin << " по " << curr_time << " длит. " << (curr_time-run_begin) << endl; 
     if (!queue.empty()) 
     {
 	  Request *rq = queue.front(); 
 	  queue.pop_front(); 
-	  calendar.put(new Event(curr_time+rq->time, EV_FIN, rq->source_num)); 
+	  calendar.put(new Event(curr_time+rq->time, EV_FIN, rq->source_num));
+	  rn++; 
 	  delete rq; 
 	  run_begin = curr_time;
 	} break;
@@ -132,21 +149,25 @@ while((curr_ev = calendar.get()) != NULL )
 } // while
 } // main
 
-int rc = 0; int pc = 0;
+
 float get_req_time(int source_num)
 {
 // Для демонстрационных целей - выдаётся случайное значение
 // при детализации модели функцию можно доработать
    double r = ((double)rand())/RAND_MAX;
-   cout << "req " << rc << endl; rc++;
-   if(source_num == 1) return r*10; else return r*20; 
+   //cout << "req " << rc << endl; rc++;
+   if(source_num == 1) return r*10; 
+   if(source_num == 2) return r*20; 
+   if(source_num == 3) return r*10; 
 }
 
 float get_pause_time(int source_num) // длительность паузы между заданиями
 {  
 // см. комментарий выше
    double p = ((double)rand())/RAND_MAX;
-   cout << "pause " << pc << endl; pc++;
-   if(source_num == 1) return p*20; else return p*10; 
+   //cout << "pause " << pc << endl; pc++;
+   if(source_num == 1) return p*20; 
+   if(source_num == 2) return p*10; 
+   if(source_num == 3) return p*10; 
 }
 
